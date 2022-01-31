@@ -1,0 +1,12 @@
+---
+# These settings are synced to GitHub by https://probot.github.io/apps/settings/
+
+_extends: gh-templates:.github/common-settings.yml
+
+repository:
+  name: "k3s-home"
+  description: "Configuration for Raspberry Pi K3s Cluster"
+  homepage: "https://rwxd.github.io/k3s-home/"
+  topics: "raspberry, terraform, k3s"
+
+  private: true
