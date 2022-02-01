@@ -4,12 +4,23 @@ provider "helm" {
   }
 }
 
+provider "kubernetes" {
+  config_path = "~/.kube/config"
+}
+
+resource "kubernetes_namespace" "metallb" {
+  metadata {
+    name = "metallb"
+  }
+}
+
 resource "helm_release" "metallb" {
-  name             = "metallb"
-  repository       = "https://metallb.github.io/metallb"
-  chart            = "metallb"
-  namespace        = "metallb"
-  create_namespace = true
+  name       = "metallb"
+  repository = "https://metallb.github.io/metallb"
+  chart      = "metallb"
+  namespace  = "metallb"
+
+  depends_on = [kubernetes_namespace.metallb, ]
 
   set {
     name  = "configInline.address-pools[0].name"
@@ -30,67 +41,19 @@ resource "helm_release" "metallb" {
   }
 }
 
-
-#resource "helm_release" "project-contour" {
-#  name             = "project-contour"
-#  repository       = "https://charts.bitnami.com/bitnami"
-#  chart            = "contour"
-#  namespace        = "project-contour"
-#  create_namespace = true
-#
-#  depends_on = [helm_release.metallb]
-#
-#  set {
-#    name  = "contour.image.registry"
-#    value = "docker.io"
-#    type  = "string"
-#  }
-#
-#  set {
-#    name  = "contour.image.repository"
-#    value = "projectcontour/contour"
-#    type  = "string"
-#  }
-#
-#  set {
-#    name  = "contour.image.tag"
-#    value = "v1.19.1"
-#    type  = "string"
-#  }
-#
-#  set {
-#    name  = "envoy.image.registry"
-#    value = "docker.io"
-#    type  = "string"
-#  }
-#
-#  set {
-#    name  = "envoy.image.repository"
-#    value = "envoyproxy/envoy"
-#    type  = "string"
-#  }
-#
-#  set {
-#    name  = "envoy.image.tag"
-#    value = "v1.21.0"
-#    type  = "string"
-#  }
-#
-#  set {
-#    name = "envoy.hostNetwork"
-#    value = true
-#  }
-#
-#}
+resource "kubernetes_namespace" "nginx-ingress-controller" {
+  metadata {
+    name = "nginx-ingress-controller"
+  }
+}
 
 resource "helm_release" "nginx-ingress-controller" {
-  name             = "nginx-ingress-controller"
-  repository       = "https://kubernetes.github.io/ingress-nginx"
-  chart            = "ingress-nginx"
-  namespace        = "nginx-ingress-controller"
-  create_namespace = true
+  name       = "nginx-ingress-controller"
+  repository = "https://kubernetes.github.io/ingress-nginx"
+  chart      = "ingress-nginx"
+  namespace  = "nginx-ingress-controller"
 
-  depends_on = [helm_release.metallb]
+  depends_on = [helm_release.metallb, kubernetes_namespace.nginx-ingress-controller]
 
   set {
     name  = "defaultBackend.enabled"
@@ -98,25 +61,21 @@ resource "helm_release" "nginx-ingress-controller" {
   }
 }
 
-resource "helm_release" "cert-manager" {
-  name             = "cert-manager"
-  repository       = "https://charts.jetstack.io"
-  chart            = "cert-manager"
-  namespace        = "cert-manager"
-  create_namespace = true
-
-  set {
-    name  = "installCRDs"
-    value = true
+resource "kubernetes_namespace" "external-dns" {
+  metadata {
+    name = "external-dns"
   }
 }
 
 resource "helm_release" "external-dns" {
-  name             = "external-dns"
-  repository       = "https://charts.bitnami.com/bitnami"
-  chart            = "external-dns"
-  namespace        = "external-dns"
-  create_namespace = true
+  name       = "external-dns"
+  repository = "https://charts.bitnami.com/bitnami"
+  chart      = "external-dns"
+  namespace  = "external-dns"
+
+  depends_on = [
+    kubernetes_namespace.external-dns,
+  ]
 
   set {
     name  = "image.registry"
@@ -136,46 +95,42 @@ resource "helm_release" "external-dns" {
     type  = "string"
   }
 
-#  set {
-#    name  = "args[0]"
-#    value = "--source=ingress"
-#  }
-#
-#  set {
-#    name  = "args[1]"
-#    value = "--provider=cloudflare"
-#  }
-#
-#  set {
-#    name  = "cloudflare.apiKey"
-#    value = var.cloudflare_api_key
-#  }
-#
-#  set {
-#    name  = "cloudflare.email"
-#    value = var.cloudflare_email
-#  }
-#
-#  set {
-#    name = "cloudflare.secretKey"
-#    value = "cloudflare-api"
-#  }
-#
-#  set {
-#    name  = "cloudflare.proxied"
-#    value = false
-#  }
+  set {
+    name  = "provider"
+    value = "cloudflare"
+  }
+
+  set {
+    name  = "cloudflare.apiKey"
+    value = var.cloudflare_api_key
+  }
+
+  set {
+    name  = "cloudflare.email"
+    value = var.cloudflare_email
+  }
+
+  set {
+    name  = "cloudflare.proxied"
+    value = false
+  }
+}
+
+resource "kubernetes_namespace" "whoami" {
+  metadata {
+    name = "whoami"
+  }
 }
 
 resource "helm_release" "whoami" {
-  name             = "whoami"
-  repository       = "https://cowboysysop.github.io/charts/"
-  chart            = "whoami"
-  namespace        = "whoami"
-  create_namespace = true
+  name       = "whoami"
+  repository = "https://cowboysysop.github.io/charts/"
+  chart      = "whoami"
+  namespace  = "whoami"
 
   depends_on = [
-    helm_release.nginx-ingress-controller
+    helm_release.nginx-ingress-controller,
+    kubernetes_namespace.whoami
   ]
 
   set {
@@ -194,21 +149,28 @@ resource "helm_release" "whoami" {
   }
 
   set {
-    name = "ingress.annotations.kubernetes\\.io/ingress\\.class"
+    name  = "ingress.annotations.kubernetes\\.io/ingress\\.class"
     value = "nginx"
   }
-}
-
-
-resource "helm_release" "adguard" {
-  name             = "adguard"
-  repository       = "https://k8s-at-home.com/charts/"
-  chart            = "adguard-home"
-  namespace        = "adguard"
-  create_namespace = true
 
   set {
-    name = "env.TZ"
-    value = "Europe/Berlin"
+      name = "ingress.annotations.cert-manager\\.io/cluster-issuer"
+      value = "cluster-issuer-prod"
+  }
+
+  set {
+      name = "ingress.annotations.nginx\\.ingress\\.kubernetes\\.io/ssl-redirect"
+      value = "true"
+      type = "string"
+  }
+
+  set {
+      name = "ingress.tls[0].secretName"
+      value = "whoami-tls"
+  }
+  
+  set {
+      name = "ingress.tls[0].hosts[0]"
+      value = "whoami.k3s.rwxd.eu"
   }
 }
